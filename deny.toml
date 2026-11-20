@@ -1,0 +1,31 @@
+[graph]
+all-features = true
+# Dev-dependencies never ship.
+exclude-dev = true
+
+[advisories]
+ignore = []
+
+[licenses]
+# Only what imgpipe's and imgpipe-cli's dependency graph (all features) needs.
+allow = [
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  # jpeg-encoder (and MozJPEG): binaries must say "this software is based in
+  # part on the work of the Independent JPEG Group" (see the crate README).
+  "IJG",
+  "MIT",
+  "Unicode-3.0",
+  "Zlib",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# imgpipe-cli's path dependency on imgpipe also has a version.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

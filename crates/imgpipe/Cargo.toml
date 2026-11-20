@@ -1,0 +1,115 @@
+[package]
+name = "imgpipe"
+version.workspace = true
+description = "Image processing pipeline"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["image", "pipeline", "resize", "text", "wasm"]
+categories = ["multimedia::images", "graphics", "wasm"]
+
+[features]
+default = ["png", "jpeg", "webp"]
+# Each format feature enables its pure-Rust decoder and, where we have one,
+# its encoder. Features are additive; C codecs get their own features later.
+png = ["image/png", "dep:png"]
+# Lossless PNG optimization with oxipng. Links libdeflate (C): native only;
+# browsers get PNG optimization from a platform encoder, like lossy WebP.
+png-optimize = ["png", "dep:oxipng"]
+jpeg = ["image/jpeg", "dep:jpeg-encoder"]
+# Progressive, trellis-quantized JPEG through MozJPEG (C, statically linked),
+# used when `optimize` is asked for. Native only: libjpeg reports errors by
+# unwinding through C, which wasm32-unknown-unknown can't do, so on wasm the
+# feature does nothing and JPEG stays on jpeg-encoder. The encoder catches
+# that unwinding and returns an error, which needs `panic = "unwind"`: a
+# binary built with `panic = "abort"` aborts on a MozJPEG error instead (only
+# enable this feature where panics unwind). x86 SIMD needs nasm
+# (without it mozjpeg-sys builds in plain C).
+jpeg-mozjpeg = ["jpeg", "dep:mozjpeg"]
+# Decodes lossy and lossless WebP; encodes lossless only (lossy needs libwebp).
+webp = ["image/webp", "dep:image-webp"]
+# Lossy (and better lossless) WebP through libwebp (C). Native builds need a C
+# compiler; wasm builds need a C compiler for wasm32 and libc headers (set
+# CC/AR/CFLAGS_wasm32_unknown_unknown, e.g. clang + wasi-libc headers) plus a
+# libc, see `wasm-libc-shim`.
+webp-libwebp = ["webp", "dep:libwebp-sys"]
+# wasm32-unknown-unknown has no libc, but the C codecs (`webp-libwebp`,
+# `png-optimize`) call malloc, calloc, realloc, free and qsort. This exports
+# those five as global `#[no_mangle]` symbols, implemented over Rust's
+# allocator and sort. Only the final wasm binary should turn it on, and only
+# when nothing else in it defines them (two definitions fail to link).
+# Without it, such a build must get those symbols from elsewhere, or linking
+# fails with "undefined symbol: malloc". Does nothing on other targets.
+wasm-libc-shim = []
+gif = ["image/gif"]
+# Text layout and drawing: HarfRust shaping, UAX #14 line breaking, tiny-skia
+# drawing. Without it, text steps still parse but fail validation.
+overlay = ["dep:harfrust", "dep:tiny-skia", "dep:unicode-linebreak"]
+# `schemars::JsonSchema` for pipeline files (editor completion).
+schemars = ["dep:schemars"]
+
+[dependencies]
+# "std" without the default extras; never "rayon" (threads on wasm).
+fast_image_resize = { version = "6.1", default-features = false, features = [
+    "std",
+] }
+image = { version = "0.25", default-features = false }
+# Transcendental functions in pure Rust: the same results on every target
+# (std calls the platform libm natively and compiler-builtins on wasm).
+libm = "0.2"
+# Not the 0.8 that `image` 0.25 pulls in (for its CICP code, which we don't
+# call), although sharing it would save a build: 0.8.1 has no budget for
+# localized-text tags, and a crafted 440 KB ICC profile makes it allocate
+# gigabytes (an abort), where 0.9 rejects it. Decoding feeds it untrusted
+# profiles.
+moxcms = "0.9"
+serde.workspace = true
+# Buffers fields that come before `version` in a pipeline file (see `config`).
+serde_json = "1"
+thiserror = "2"
+
+image-webp = { version = "0.2", optional = true }
+jpeg-encoder = { version = "0.7", optional = true }
+libwebp-sys = { version = "0.14", default-features = false, optional = true }
+oxipng = { version = "10.2", default-features = false, optional = true }
+harfrust = { version = "0.16", optional = true }
+png = { version = "0.18", optional = true }
+schemars = { version = "1", optional = true }
+tiny-skia = { version = "0.12", default-features = false, features = [
+    "std",
+    "simd",
+], optional = true }
+unicode-linebreak = { version = "0.1", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+mozjpeg = { version = "0.10", optional = true }
+
+[dev-dependencies]
+moxcms = "0.9"
+png = "0.18"
+toml = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[[example]]
+name = "png_compare"
+required-features = ["png-optimize"]
+
+[[example]]
+name = "jpeg_compare"
+required-features = ["jpeg-mozjpeg"]
+
+[[test]]
+name = "overlay"
+required-features = ["overlay", "png"]
+
+
+# Only `overlay` and `schemars` add public API (types, impls); the codec
+# features change behaviour, not items. The C codecs (`png-optimize`,
+# `jpeg-mozjpeg`, `webp-libwebp`) would show nothing more and only add a C
+# build that could break the docs build.
+[package.metadata.docs.rs]
+features = ["gif", "overlay", "schemars"]
+rustdoc-args = ["--cfg", "docsrs"]

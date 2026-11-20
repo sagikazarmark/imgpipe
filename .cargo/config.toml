@@ -1,0 +1,7 @@
+[target.wasm32-unknown-unknown]
+# tiny-skia and fast_image_resize only use SIMD on wasm with SIMD128, which
+# every current browser and Node support. Relaxed SIMD stays off (not deterministic).
+rustflags = ["-C", "target-feature=+simd128"]
+
+# `cargo test --target wasm32-unknown-unknown` runs tests in Node.
+runner = "wasm-bindgen-test-runner"
